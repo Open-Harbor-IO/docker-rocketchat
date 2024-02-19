@@ -1,0 +1,57 @@
+services:
+  rocketchat:
+    image: registry.rocket.chat/rocketchat/rocket.chat:latest
+    restart: always
+    environment:
+      MONGO_URL: "mongodb://mongodb:27017/rocketchat?replicaSet=rs0"
+      MONGO_OPLOG_URL: "mongodb://mongodb:27017/local?replicaSet=rs0"
+      ROOT_URL: ${ROOT_URL:-http://localhost:3000}
+      PORT: 3000
+      DEPLOY_METHOD: docker
+      DEPLOY_PLATFORM: ${DEPLOY_PLATFORM:-}
+      REG_TOKEN: ${REG_TOKEN:-}
+    depends_on:
+      - mongodb
+    networks:
+      - nginx-network
+      - rocketchat
+    expose:
+      - 3000
+    ports:
+      - "3000:3000"
+
+  mongodb:
+    hostname: mongodb
+    image: mongo:5.0.24
+    restart: always
+    networks:
+      - rocketchat
+    expose:
+      - 27017
+    ports:
+      - "27017:27017"
+    healthcheck:
+     test: test $$(echo "rs.initiate().ok || rs.slaveOk().ok || rs.status().ok" | mongo --quiet) -eq 1
+     interval: 10s
+     start_period: 30s
+    volumes:
+      - ./data/mongodb:/mnt/backup
+    entrypoint: [ "/usr/bin/mongod", "--bind_ip_all", "--replSet", "rs0" ]
+    environment:  
+      MONGO_REPLICA_SET_NAME: rs0
+
+  mongo-express:
+    image: mongo-express
+    restart: always
+    networks:
+      - rocketchat
+    ports:
+      - 8081:8081
+    environment: 
+      ME_CONFIG_MONGODB_URL: mongodb://mongodb:27017/admin?replicaSet=rs0
+
+networks:
+  rocketchat:
+    driver: bridge
+  nginx-network:
+    external: true
